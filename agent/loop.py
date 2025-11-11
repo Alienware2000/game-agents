@@ -6,14 +6,14 @@ class AgentLoop:
         self.t = tools
         self.max_steps = max_steps
 
-    def run(self, plan: List[Dict]) -> Dict:
+    def run(self) -> Dict:
         # plan is a list like [{"tool":"move","args":{"direction":"right"}}, ...]
         obs = self.t.observe()
         history = []
         steps = 0
-        for action in plan:
-            if steps >= self.max_steps:
-                break
+
+        while steps < self.max_steps:
+            action = self._plan(obs, steps)
             result = self._dispatch(action)
             history.append({"action": action, "result": result})
             obs = self.t.observe()
@@ -30,3 +30,8 @@ class AgentLoop:
             return {"ok": True, "observation": self.t.observe()}
         
         return {"ok": False, "error": f"unknown tool {name}"}
+    
+    def _plan(self, obs: Dict, step: int) -> Dict:
+        dirs = ["right", "right", "down", "down", "left", "up"]
+        d = dirs[step % len(dirs)]
+        return {"tool": "move", "args": {"direction": d}}
