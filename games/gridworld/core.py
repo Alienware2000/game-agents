@@ -25,11 +25,17 @@ class GridWorld:
         self.player: Coord = (1, 1) # Starting position of the player
         r, c = self.player
         self.grid[r][c] = TITLE_PLAYER
+
+        # Inventory + items
         self.inventory: Dict[str, int] = {}
+
+        # Items on the floor: interior tiles
         self.items_on_floor = {
             (1, 4) : ["coal"],
             (3, 1) : ["stick"]
         }
+
+        # Goal
         self.goal = {"action": "craft", "item": "torch", "qty": 1}
 
     # Check if a coordinate is within bounds
@@ -43,19 +49,27 @@ class GridWorld:
     # Observe the current state of the gridworld
     def observe(self) -> Dict:
         view = []
+
         for row in range(self.size):
-            line = ""
+            line = "" # reset the line for each new row
+
             for col in range(self.size):
-                if (row, col) == self.player:
-                    line += "P"
-                elif self.grid[row][col] == "#":
+                # # Player at this cell? # Perception vs State Bug
+                # if (row, col) == self.player:
+                #     line += "P"
+
+                # Wall?
+                if self.grid[row][col] == "#":
                     line += "#"
+                # Item on floor?
                 elif (row, col) in self.items_on_floor:
                     # show first item letter
-                    line += self.items_on_floor[(row, col)][0][0].upper()
+                    item_name = self.items_on_floor[(row, col)][0]
+                    line += item_name[0].upper()
                 else:
                     line += "."
-                view.append(line)
+
+            view.append(line)
         return {
             "grid": view,
             "player": {"row": self.player[0], "col": self.player[1]},
