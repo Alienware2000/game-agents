@@ -5,6 +5,9 @@ Coord = Tuple[int, int]
 TITLE_EMPTY = "."
 TITLE_WALL = "#"
 TITLE_PLAYER = "P"
+RECIPES = {
+    "torch": {"coal": 1, "stick": 1}
+}
 
 # Define the GridWorld environment
 class GridWorld:
@@ -23,6 +26,11 @@ class GridWorld:
         r, c = self.player
         self.grid[r][c] = TITLE_PLAYER
         self.inventory: Dict[str, int] = {}
+        self.items_on_floor = {
+            (1, 4) : ["coal"],
+            (3, 1) : ["stick"]
+        }
+        self.goal = {"action": "craft", "item": "torch", "qty": 1}
 
     # Check if a coordinate is within bounds
     def _in_bounds(self, r: int, c: int) -> bool:
@@ -34,11 +42,26 @@ class GridWorld:
     
     # Observe the current state of the gridworld
     def observe(self) -> Dict:
+        view = []
+        for row in range(self.size):
+            line = ""
+            for col in range(self.size):
+                if (row, col) == self.player:
+                    line += "P"
+                elif self.grid[row][col] == "#":
+                    line += "#"
+                elif (row, col) in self.items_on_floor:
+                    # show first item letter
+                    line += self.items_on_floor[(row, col)][0][0].upper()
+                else:
+                    line += "."
+                view.append(line)
         return {
-            "grid": ["".join(row) for row in self.grid],
+            "grid": view,
             "player": {"row": self.player[0], "col": self.player[1]},
             "inventory": dict(self.inventory),
-            "goal_done": False
+            "goal": self.goal,
+            "goal_done": self._goal_done()
         }
 
     # Move the player in a specified direction
@@ -67,4 +90,42 @@ class GridWorld:
         self.player = (new_r, new_c)
         self.grid[new_r][new_c] = TITLE_PLAYER
         return {"ok": True, "player": {"row": new_r, "col": new_c}}
+    
+    # Pick up on object in the environment
+    def pickup(self) -> Dict:
+        pos = self.player
+        items = self.items_on_floor.get(pos, [])
+        if not items:
+            return {"ok": False, "error": "nothing to pickup"}
+        picked = items.pop(0)
+        if not items:
+            self.items_on_floor.pop(pos, None)
+        self.inventory[picked] = self.inventory.get(picked, 0) + 1
+        return {"ok": True, "picked": picked, "inventory": dict(self.inventory)}
+    
+    def _goal_done(self) -> bool:
+        g = self.goal
+        if g["action"] == "craft":
+            return self.inventory.get(g["item"], 0) >= g["qty"]
+        return False
+    
+    # Craft an item
+    def craft(self, item: str, qty: int = 1) -> Dict:
+        if item not in RECIPES:
+            return {"ok": False, "error": f"no recipe for {item}"}
+        recipe = RECIPES[item]
+        
+        # verify resources
+        for res, need in recipe.items():
+            if self.inventory.get(res, 0) < need * qty:
+                return {"ok": False, "error": "insufficient materials"}
+        
+        # consume
+        for res, need in recipe.items():
+            self.inventory[res] -= need * qty
+
+        # produce
+        self.inventory[item] = self.inventory.get(item, 0) + qty
+        return {"ok": True, "crafted": {item: qty}, "inventory": dict(self.inventory), "goal_done": self._goal_done()}
+
     

@@ -11,3 +11,8 @@ class Tools:
     def move(self, direction: str) -> Dict:
         return self.env.move(direction)
     
+    def pickup(self) -> Dict:
+        return self.env.pickup()
+    
+    def craft(self, item: str, qty: int = 1) -> Dict:
+        return self.env.craft(item, qty)
