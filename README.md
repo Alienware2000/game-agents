@@ -49,6 +49,42 @@ Introduce a richer environment (Pygame or a new custom world) and reuse the exac
 
 ---
 
+## 🏁 Milestone Summary (Project Progress)
+
+A concise list of all milestones completed so far in this project:
+
+- **Milestone 0:** Tiny World + Tiny Agent  
+  - Built a minimal 10×10 GridWorld  
+  - Added player movement and an `observe()` method  
+  - Implemented the first observe → act loop
+
+- **Milestone 1:** Tools Interface  
+  - Created a `Tools` class exposing `observe` and `move`  
+  - Enforced separation between agent and environment  
+  - Prepared foundation for MCP-style tool contracts
+
+- **Milestone 2:** Agent Loop with Trivial Planner  
+  - Added a `_plan()` method  
+  - Enabled the first autonomous behavior  
+  - Agent executes actions selected at runtime (not hardcoded scripts)
+
+- **Milestone 3A:** Pickup, Inventory, Crafting, and Goal System  
+  - Added items on the grid (coal, stick)  
+  - Implemented `pickup()` and an inventory system  
+  - Added crafting (`torch = coal + stick`)  
+  - Introduced a goal structure and `goal_done` tracking  
+  - Agent successfully completes a multi-step objective
+
+- **Milestone 3B:** Reactive, Perception-Driven Planner  
+  - Agent now scans the grid to locate visible items  
+  - Moves toward items based on observation (no hardcoded positions)  
+  - Picks up required resources and crafts the torch  
+  - Fully autonomous, perception-driven behavior
+
+(Upcoming)  
+- **Milestone 4:** MCP Integration  
+- **Milestone 5:** Second Game World (Pygame or custom design)
+
 ## 🌟 Why This Project Exists
 
 I want to deeply understand:
