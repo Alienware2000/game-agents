@@ -1,7 +1,7 @@
 # 🧠 Game Agents — A Learning Sandbox for Agentic Development
 
 **Game Agents** is my personal sandbox for learning **agentic development from first principles**.  
-Instead of relying on pre-built frameworks, I am building everything from scratch — the worlds, the tools, the agent loops, the planners, and later the MCP server that will make the agent portable across environments.
+Instead of relying on pre-built frameworks, I am building everything from scratch — the worlds, the tools, the agent loops, the planners, and the MCP server that makes the agent portable across environments.
 
 The long-term goal is to master agentic thinking and agentic engineering across *any* domain:  
 games, embedded systems, robotics, productivity, business automation, and beyond.
@@ -13,6 +13,7 @@ This project uses games as a fun and visual way to explore agent capabilities, d
 ## 🛰️ Milestone 4 — MCP Integration (Tool Server Architecture)
 
 ### ✔️ Completed
+
 - **Built `mcp_gridworld_server.py`**, turning the entire GridWorld into an **MCP-compliant tool server**.
 - Exposed the environment’s capabilities as MCP tools:
   - `observe()`
@@ -27,22 +28,74 @@ This project uses games as a fun and visual way to explore agent capabilities, d
   - invoked tools manually  
   - observed live world updates  
   - picked up items and crafted using MCP calls  
-- This milestone lifts the project from a local Python simulation to a **portable, externally-controllable agent environment**.
+
+This milestone lifts the project from a local Python simulation to a **portable, externally-controllable agent environment**.
+
+> **Note:** The MCP server currently exposes the GridWorld as tools.  
+> The LLM planner (next milestone) still runs in a separate script and calls the environment directly.  
+> A future step is to route LLM tool use *through* MCP as well.
 
 ### 🧠 Why This Matters
-With MCP integration:
-- The GridWorld becomes a **first-class tool provider** for any LLM or agent capable of MCP.
-- Tools are now described using **schema**, which lets the LLM understand how to call them.
-- The environment operates like a real API — the same pattern used by:
-  - ChatGPT/Claude tool calling
-  - Cursor Agents
-  - Voyager / Minecraft agents
-  - Web automation tools
-  - Robotics/IoT control systems
 
-GridWorld is now “LLM-ready,” meaning any Large Language Model can reason about the world, choose actions, and call the tools through the protocol.
+With MCP integration:
+
+- The GridWorld becomes a **first-class tool provider** for any LLM or agent capable of MCP.
+- Tools are now described using **schemas**, which lets the LLM understand how to call them.
+- The environment operates like a real API — the same pattern used by:
+  - ChatGPT / Claude tool calling  
+  - Cursor agents  
+  - Voyager / Minecraft-style agents  
+  - Web automation tools  
+  - Robotics / IoT control systems  
+
+GridWorld is now “LLM-ready,” meaning any Large Language Model can reason about the world, choose actions, and call tools through a protocol.
 
 This is the exact architecture modern agentic systems are built on.
+
+---
+
+## 🤖 Milestone 5 — LLM Planner Agent (Structured Observations + Tool Use)
+
+### ✔️ Completed
+
+- Implemented `scripts/run_llm_agent.py`, a **LLM-driven control loop**:
+  - Uses an LLM (via Groq / OpenAI) to choose actions.
+  - The agent **never touches the GridWorld directly** — it only acts through tools:
+    - `move(direction)`
+    - `pickup()`
+    - `craft(item, qty)`.
+- Designed a clean **observe → plan → act → repeat** loop:
+  - Environment returns a structured observation (`grid`, `player`, `inventory`, `goal`, `goal_done`).
+  - We format this into a prompt and ask the LLM which tool to call next.
+- Added **preprocessed perception** for the LLM:
+  - `items_in_world = [{"type": "coal", "row": ..., "col": ...}, ...]`
+  - This gives the model an object-level view of the world instead of forcing it to “read” ASCII art.
+- Introduced **short-term memory** in the observation:
+  - `last_action`
+  - `last_result`
+  - This lets the LLM see whether the last move failed (e.g. `"move blocked"`) and adjust.
+- Implemented **action constraints & safety checks**:
+  - Block illegal or useless actions (e.g. `pickup()` when nothing is under the player).
+  - Prevent repeated blocked moves (do not keep walking into a wall).
+  - Ensure `craft("torch", 1)` is only called when there is at least one `coal` and one `stick`.
+- Added a small helper policy, `suggest_direction_toward_target`, that:
+  - Looks at `player` vs `items_in_world`
+  - Suggests a direction that reduces Manhattan distance to the next needed item
+  - Is used as a *fallback / nudge* when the LLM keeps getting stuck
+
+### 🧩 What This Milestone Shows
+
+- How to wrap a simple grid world in **tool-like actions** and let an LLM decide which to call.
+- How to combine:
+  - LLM **flexibility** (choosing tools, reacting to results)
+  - with **guardrails** (constraints, reflex rules, fallback heuristics).
+- How to build up an agent loop **incrementally**:
+  1. Pure rule-based planner (M3B).
+  2. LLM planner with raw grid.
+  3. LLM planner with structured perception + memory + constraints.
+
+Right now, the LLM planner talks to the environment directly via Python, while MCP exposes the same tools over a protocol.  
+The next step is to **join these worlds** so the LLM can use the MCP server as its tool backend.
 
 ---
 
@@ -83,17 +136,24 @@ A concise list of all milestones completed so far in this project:
   - Tools validated with MCP Inspector  
   - Successfully invoked actions (`observe`, `move`, `pickup`, `craft`) through the protocol  
   - World is now externally controllable by LLMs and agent hosts  
-  - Foundation laid for LLM-driven agent planning (Milestone 5)
+  - Foundation laid for LLM-driven planning over MCP
+
+- **Milestone 5:** LLM Planner Agent  
+  - Implemented a Python LLM agent loop in `scripts/run_llm_agent.py`  
+  - Uses structured observations (`items_in_world`, `last_action`, `last_result`)  
+  - Enforces action constraints and reflex rules to keep the agent safe and efficient  
+  - Demonstrates a full LLM-in-the-loop tool-using agent over GridWorld
 
 (Upcoming)  
-- **Milestone 5:** LLM Planner Agent (LLM-controlled decision-making)  
-- **Milestone 6:** Second Game World (Pygame or custom design)
+- **Milestone 6:** LLM-over-MCP (agent uses the MCP server as its tool backend)  
+- **Milestone 7:** Second Game World (Pygame or custom design)
 
 ---
 
 ## 🌐 What MCP Adds to the Project
 
 MCP transforms the GridWorld from a local Python program into a **remote, tool-based environment** that any agent can connect to.  
+
 This means:
 
 - The world is now a **service** with callable tools.  
@@ -101,18 +161,20 @@ This means:
 - The environment is no longer limited to the Python agent loop — LLMs, external clients, or other agents can control it.
 
 This opens the door to:
+
 - **LLM-driven agents** that decide actions based on world observations.  
 - Reusable **tool schemas** that multiple agents can share.  
 - Plug-and-play integration with future tools, games, and hardware.  
 - Multi-game, multi-world agents that operate across entirely different environments.
 
-MCP is the bridge between “game logic” and “AI agent intelligence.”
+MCP is the bridge between “game logic” and “AI agent intelligence”. :contentReference[oaicite:0]{index=0}
 
 ---
 
 ## 🌟 Why This Project Exists
 
 I want to deeply understand:
+
 - how agents perceive, plan, and act  
 - how to design tool interfaces and action spaces  
 - how to build portable, general agents that can operate across domains  
@@ -121,3 +183,11 @@ I want to deeply understand:
 This repository is a living journey toward **agentic mastery**, built one small, clear milestone at a time.
 
 ---
+
+## 📚 Further Reading and References
+
+Some of the ideas in this project connect to existing work on tool-using and embodied agents:
+
+- **ReAct: Synergizing Reasoning and Acting in Language Models** – an early paper on letting LLMs interleave thinking and tool use.   
+- **Voyager: An Open-Ended Embodied Agent in Minecraft** – shows how agents can explore, learn skills, and act in a voxel world using tools and a curriculum.   
+- **OpenAI Apps SDK & MCP Quickstart** – official docs explaining how MCP servers expose tools to ChatGPT and other apps. 
