@@ -8,6 +8,14 @@ from mcp import StdioServerParameters
 from mcp.client.session import ClientSession
 from mcp.client.stdio import stdio_client
 
+# from agent.loop import (
+#     attach_memory,
+#     format_observation,
+#     reflex_action,
+#     enforce_action_constraints,
+#     suggest_direction_toward_target
+# )
+
 # ---------- LLM SETUP -----------
 
 SYSTEM_PROMPT = """

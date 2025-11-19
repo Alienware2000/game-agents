@@ -1,107 +1,248 @@
-from typing import Dict, List
-from agent.tools import Tools
+"""
+Shared helper functions for agent loops.
 
-class AgentLoop:
-    def __init__(self, tools: Tools, max_steps: int = 20):
-        self.t = tools
-        self.max_steps = max_steps
+These functions are intentionally backend-agnostic:
+they only care about the *observation* dictionary and the *action* dict.
 
-    def run(self) -> Dict:
-        # plan is a list like [{"tool":"move","args":{"direction":"right"}}, ...]
-        obs = self.t.observe()
-        history: List[Dict] = []
-        steps = 0
+They do NOT reach into GridWorld or MCP directly.
+"""
 
-        while steps < self.max_steps:
-            action = self._plan(obs, steps)
-            result = self._dispatch(action)
-            history.append({"action": action, "result": result})
-            obs = self.t.observe()
-            steps += 1
+from typing import Dict, Any, Optional, List
 
-            if obs.get("goal_done"):
-                break
-        
-        return {"steps": steps, "observation": obs, "history": history}
+
+def find_items_in_grid(grid: List[str]) -> List[Dict[str, Any]]:
+    """
+    Scan the grid (list of strings) and return a list of items
+    with their types and positions.
+
+    Example return value:
+        [
+            {"type": "coal", "row": 1, "col": 4},
+            {"type": "stick", "row": 3, "col": 1}
+        ]
+    """
+    items: List[Dict[str, Any]] = []
+    for r, row in enumerate(grid):
+        for c, ch in enumerate(row):
+            if ch == "C":
+                items.append({"type": "coal", "row": r, "col": c})
+            elif ch == "S":
+                items.append({"type": "stick", "row": r, "col": c})
+    return items
+
+def attach_memory(
+        obs: Dict[str, Any],
+        last_action: Optional[Dict[str, Any]],
+        last_result: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    Attach short-term memory field into the observation.
+
+    This lets the LLM see what happened on the previous step.
+    """
+    obs["last_action"] = last_action
+    obs["last_result"] = last_result
+    return obs
+
+def format_observation(obs: Dict[str, Any]) -> str:
+    """
+    Turn the observation dict into a human-readable string for the LLM.
+
+    This is where we:
+    - render the ASCII grid
+    - show player + inventory
+    - compute items_in_world using find_items_in_grid
+    - show goal + memory (last_action/last_result)
+    """
+    grid = obs["grid"]
+    lines = "\n".join(grid)
+
+    player = obs["player"]
+    inventory = obs["inventory"]
+    goal = obs["goal"]
+    goal_done = obs["goal_done"]
+
+    last_action = obs.get("last_action")
+    last_result = obs.get("last_result")
+
+    items_in_world = find_items_in_grid(grid)
+
+    return f"""grid:
+
+{lines}
+
+player: {player}
+inventory: {inventory}
+items_in_world: {items_in_world}
+goal: {goal}
+goal_done: {goal_done}
+last_action: {last_action}
+last_result: {last_result}
+"""
+
+def reflex_action(obs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Simple hard-coded reflexes that run before the LLM:
+
+    - If the plyer is standing on C or S, always pickup().
+    - (Optional later) if inventory has coal + stick, craft a torch.
+
+    Returns:
+        - an action dict: {"tool": "...", "args": {...}} if a reflex fires
+        - None if no reflex should be applied
+    """
+    grid = obs["grid"]
+    player = obs["player"]
+    inventory = obs["inventory"] # kept for future reflexes
+
+    row = player["row"]
+    col = player["col"]
+
+    # Defensive check: make sure row/col are in range
+    if 0 <= row < len(grid) and 0 <= col < len(grid[row]):
+        tile = grid[row][col]
+    else:
+        tile = "."
     
-    def _dispatch(self, action: Dict) -> Dict:
-        name = action["tool"]
-        args = action.get("args", {})
-        if name == "move":
-            return self.t.move(**args)
-        if name == "pickup":
-            return self.t.pickup()
-        if name == "craft":
-            return self.t.craft(**args)
-        if name == "observe":
-            return {"ok": True, "observation": self.t.observe()}
-        
-        return {"ok": False, "error": f"unknown tool {name}"}
+    # Reflex 1: standing on an item? Always pick it up.
+    if tile in ("C", "S"):
+        return {"tool": "pickup", "args": {}}
     
-    def _plan(self, obs: Dict, step: int) -> Dict:
-        # If goal is done, just observe (no-op)
-        if obs.get("goal_done"):
-            return {"tool": "observe"}
+    # (Optional Reflex 2: auto-craft when ready)
+    # if inventory.get("coal", 0) >= 1 and inventory.get("stick", 0) >= 1 and inventory.get("torch", 0) < 1:
+    #      return {"tool": "craft", "args": {"item": "torch", "qty": 1}}
 
-        # Basic info from observation
-        grid = obs["grid"]
-        pr, pc = obs["player"]["row"], obs["player"]["col"]
-        inv = obs["inventory"]
+    return None # no reflex triggered
 
-        # What resources do we still need? Do we need coal or stick? 
-        need_coal = inv.get("coal", 0) < 1
-        need_stick = inv.get("stick", 0) < 1
+def suggest_direction_toward_target(
+        player: Dict[str, int],
+        target: Dict[str, int]
+) -> str:
+    """
+    Given player {"row": r, "col": c} and target {"row": tr, "col": tc},
+    return a direction string ("up"/"down"/"left"/"right") that moves the
+    player one step closer to the target in Manhattan distance.
 
-        # Scan grid for visible item locations
-        coal_locs = []
-        stick_locs = []
+    This is a tiny navigation helper; the LLM still decides WHICH item to chase
+    and WHEN to craft. This just helps with the low-level step.
+    """
 
-        for r, line in enumerate(grid):
-            for c, ch in enumerate(line):
-                if ch == "C":
-                    coal_locs.append((r, c))
-                if ch == "S":
-                    stick_locs.append((r, c)) 
+    row = player["row"]
+    col = player["col"]
+    tr = target["row"]
+    tc = target["col"]
 
-        # Navigation helper
-        def move_toward(src, dst):
-            sr, sc = src; dr, dc = dst
-            if sr < dr: return {"tool": "move", "args": {"direction": "down"}}
-            if sr > dr: return {"tool": "move", "args": {"direction": "up"}}
-            if sc < dc: return {"tool": "move", "args": {"direction": "right"}}
-            if sc > dc: return {"tool": "move", "args": {"direction": "left"}}
-            return None  # already there
+    dr = tr - row
+    dc = tc - col
+
+    # Already on the target tile
+    if dr == 0 and dc == 0:
+        # Arbitrary default; usually overridden by pickup()
+        return "up"
+    
+    # Prioritize the axis with the larger absolute difference.
+    if abs(dr) >= abs(dc):
+        # Move vertically toward target
+        if dr < 0:
+            return "up"
+        else:
+            return "down"
+    else:
+        # Move horizontally toward target
+        if dc < 0:
+            return "left"
+        else:
+            return "right"
         
-        # 1) If we still need coal, go to coal and pick it up
-        if need_coal:
-            # If we SEE coal
-            if coal_locs:
-                target = coal_locs[0]
+def enforce_action_constraints(obs: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Enforce hard rules on what action are allowed in this state.
 
-                # If we're not standing on it, walk toward it
-                if (pr, pc) != target:
-                    nxt = move_toward((pr, pc), target)
-                    if nxt: return nxt
+    If the LLM suggests something illegal or useless, we replace it with a 
+    safe fallback.
 
-                # If already on it -> pick it up
-                return {"tool": "pickup"}
-            
-            directions = ["right", "down", "left", "up"]
-            return {"tool": "move", "args": {"direction": directions[step % 4]}}
-        
-        # If we still need stick, go to stick and pick it up
-        if need_stick:
-            if stick_locs:
-                target = stick_locs[0]
+    Also:
+    - use items_in_world and suggest_direction_toward_target
+      to steer move() actions toward the nearest useful item.
+    - Avoid repeating blocked moves in the same direction.
+    """
 
-                if (pr, pc) != target:
-                    nxt = move_toward((pr, pc), target)
-                    if nxt: return nxt
+    grid = obs["grid"]
+    player = obs["player"]
+    inventory = obs["inventory"]
+    last_result = obs.get("last_result")
+    last_action = obs.get("last_action") or {}
+    
+    row = player["row"]
+    col = player["col"]
 
-                return {"tool": "pickup"}
-            
-            # Stick not visible? explore
-            return {"tool": "move", "args": {"direction": ["right","down","left","up"][step % 4]}}
+    if 0 <= row < len(grid) and 0 <= col < len(grid[row]):
+        tile = grid[row][col]
+    else:
+        tile = "."
+    
+    name = action.get("tool")
+    args = action.get("args", {})
 
-        # 3) If both items collected → craft
-        return {"tool": "craft", "args": {"item": "torch", "qty": 1}}
+    # -------- Rule 1: Cannot pickup if not standing on C or S --------
+    if name == "pickup" and tile not in ("C", "S"):
+        # Turn this into a move; we'll refine the direction below.
+        name = "move"
+        args = {"direction": "right"}  # temporary default
+        action = {"tool": name, "args": args}
+
+    # -------- Rule 2: Cannot craft torch without coal + stick --------
+    if name == "craft":
+        if not (inventory.get("coal", 0) >= 1 and inventory.get("stick", 0) >= 1):
+            name = "move"
+            args = {"direction": "right"}  # temporary default
+            action = {"tool": name, "args": args}
+
+    # -------- Move toward the nearest relevant item --------
+    if name == "move":
+        # 1) Decide what we need next
+        items_in_world = find_items_in_grid(grid)
+
+        target_type = None
+        if inventory.get("coal", 0) < 1:
+            target_type = "coal"
+        elif inventory.get("stick", 0) < 1:
+            target_type = "stick"
+        else:
+            target_type = None  # we already have everything we need to craft
+
+        # 2) Find nearest item of that type (if any)
+        target_item = None
+        if target_type is not None:
+            candidates = [it for it in items_in_world if it["type"] == target_type]
+            if candidates:
+                def manhattan(it: Dict[str, Any]) -> int:
+                    return abs(it["row"] - row) + abs(it["col"] - col)
+
+                target_item = min(candidates, key=manhattan)
+
+        # 3) If we have a target, override direction with a purposeful step
+        if target_item is not None:
+            best_dir = suggest_direction_toward_target(player, target_item)
+            args["direction"] = best_dir
+            action = {"tool": "move", "args": args}
+    
+    # -------- Rule 3: Don't repeat a blocked move in the same direction --------
+    if (
+        last_result is not None
+        and last_result.get("ok") is False
+        and last_result.get("error") == "move blocked"
+        and name == "move"
+    ):
+        last_tool = last_action.get("tool")
+        last_args = last_action.get("args", {})
+        if last_tool == "move" and last_args.get("direction") == args.get("direction"):
+            blocked_dir = args.get("direction")
+            # Naive heuristic: pick a different direction
+            for d in ["up", "left", "right", "down"]:
+                if d != blocked_dir:
+                    args["direction"] = d
+                    action = {"tool": "move", "args": args}
+                    break
+
+    return action

@@ -1,7 +1,7 @@
 # scripts/run_agent.py
 from games.gridworld.core import GridWorld
 from agent.tools import Tools
-from agent.loop import AgentLoop
+from agent.rule_based import AgentLoop
 
 def main():
     env = GridWorld()
