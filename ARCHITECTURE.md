@@ -6,7 +6,7 @@ At a high level there are three layers:
 
 1. **Worlds** – game environments the agent lives in  
 2. **Tool backends** – ways to interact with the world (Python / MCP)  
-3. **Agent loops** – logic that observes, plans, and acts
+3. **Agent loops & shared helpers** – logic that observes, plans, constrains, and acts
 
 ---
 
@@ -20,26 +20,27 @@ At a high level there are three layers:
   - `observe()`, `move()`, `pickup()`, `craft()`
   - `goal` and `goal_done` for task completion
 
-This layer knows **nothing** about LLMs or MCP. It is just game logic.
+This layer knows **nothing** about LLMs, MCP, or any agent.  
+It is just game logic.
 
 ---
 
 ## 2. Tool Backends
 
-Two ways to expose the same environment as tools:
+These expose the environment as “tools” that an agent can call.
 
 ### 2.1 Python tools
 
 - `agent/tools.py`
 
-Wraps a `GridWorld` instance with simple Python methods:
+Wraps a `GridWorld` instance with simple Python-accessible actions:
 
 - `Tools.observe()`
 - `Tools.move(direction)`
 - `Tools.pickup()`
 - `Tools.craft(item, qty)`
 
-These are used by Python-based agents like `scripts/run_llm_agent.py`.
+Used by Python-based agents such as `scripts/run_llm_agent.py`.
 
 ### 2.2 MCP server
 
@@ -47,71 +48,82 @@ These are used by Python-based agents like `scripts/run_llm_agent.py`.
 
 Uses **FastMCP** to expose GridWorld as **MCP tools**:
 
-- `gridworld.observe`
-- `gridworld.move`
-- `gridworld.pickup`
-- `gridworld.craft`
+- `observe`
+- `move`
+- `pickup`
+- `craft`
 
-This lets external LLM hosts and MCP clients control the same world over a protocol.
+This allows any MCP-compatible LLM host (ChatGPT, Claude, Assistant API, etc.)  
+to control the GridWorld environment over a protocol.
+
+The MCP server is now a **first-class tool provider**.
 
 ---
 
-## 3. Agent Loops
+## 3. Agent Loops & Shared Helper Layer
 
-There are two main agent entrypoints:
+### 3.1 Shared helper functions (core of modern architecture)
 
-### 3.1 LLM planner over Python tools
+- `agent/loop.py`
+
+This file contains all reusable logic shared by *every* agent loop:
+
+- `find_items_in_grid` – preprocessed perception for LLMs  
+- `attach_memory` – injects `last_action` and `last_result`  
+- `format_observation` – converts env observation into LLM-readable text  
+- `reflex_action` – auto-pickup and rule-based reflexes  
+- `suggest_direction_toward_target` – tiny navigation helper  
+- `enforce_action_constraints` – safety, legality, fallback moves, avoid repeated-blocked moves  
+
+**This is now the canonical “agent brain utility layer.”**  
+All agents (Python, MCP, future games, etc.) use these.
+
+### 3.2 LLM planner over Python tools
 
 - `scripts/run_llm_agent.py`
 
-Key ideas:
+This agent:
 
-- Calls `env.observe()` (via `Tools`) to get a structured observation:
-  - `grid`, `player`, `inventory`, `goal`, `goal_done`
-- Adds:
-  - `items_in_world` (parsed objects like coal/stick positions)
-  - `last_action`, `last_result` (short-term memory)
-- Sends this to an LLM with a **system prompt** that explains:
-  - the world
-  - the available tools (`move`, `pickup`, `craft`)
-  - rules for valid actions
-- LLM responds with a JSON action:
-  - `{"tool": "...", "args": {...}}`
-- Before executing, the code applies:
-  - **reflex rules** (auto `pickup` when on an item)
-  - **constraints** (block illegal actions, avoid repeating blocked moves)
-  - **navigation helper** `suggest_direction_toward_target` to move toward coal/stick
+- Calls Python `Tools` to interact with GridWorld  
+- Requests actions from the LLM using `SYSTEM_PROMPT`  
+- Adds memory + structured perception  
+- Applies reflexes + constraints  
+- Dispatches actions via Python methods (`Tools.move`, `Tools.pickup`, etc.)
 
-This agent talks **directly** to GridWorld through Python code.
+This is the “LLM agent with direct Python backend.”
 
-### 3.2 LLM planner over MCP
+### 3.3 LLM planner over MCP
 
-- `run_llm_agent_mcp.py`
+- `scripts/run_llm_agent_mcp.py`
 
-Same high-level logic as above, but:
+Same planning logic as above, but:
 
-- Uses **MCP client** to call tools:
-  - `gridworld.observe`
-  - `gridworld.move`
-  - `gridworld.pickup`
-  - `gridworld.craft`
-- Still:
-  - formats a structured observation
-  - uses reflex rules and constraints
-  - lets the LLM pick actions in JSON
+- Connects to the MCP GridWorld server  
+- Calls MCP tools instead of Python methods:
+  - `observe`
+  - `move`
+  - `pickup`
+  - `craft`
+- Still uses all shared helper functions for:
+  - memory
+  - constraints
+  - navigation
+  - reflexes
 
-The agent now behaves like a **real LLM app client**:
-it never calls `GridWorld` methods directly, only MCP tools.
+This agent behaves like a **real production LLM client**, not a Python script calling environment internals.
 
 ---
 
-## 4. Older utilities
+## 4. Older utilities (now mostly superseded)
 
-- `agent/loop.py`  
-  Earlier, simpler loop experiments from the first milestones.
+These remain useful for reference/debugging but are not used in the refactored architecture:
 
-- `scripts/run_agent.py`, `scripts/run.py`, `scripts/test_tools_smoke.py`  
-  Older scripts used to test the environment and tools. Still useful for debugging.
+- `agent/rule_based.py`  
+- `scripts/run_agent.py`  
+- `scripts/run.py`  
+- `scripts/test_tools_smoke.py`
+
+They were part of early milestones (0–3B) and show the evolution of the project.
 
 ---
 
@@ -119,4 +131,4 @@ it never calls `GridWorld` methods directly, only MCP tools.
 
 See `README.md` for the human-friendly milestone story.
 
-This `ARCHITECTURE.md` is the “map” of how the code fits together.
+This `ARCHITECTURE.md` is the “map” of how the code fits together in the final refactored structure.
