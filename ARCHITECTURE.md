@@ -1,148 +1,249 @@
 # Game Agents – Architecture Overview
 
-This repo is a learning sandbox for **agentic development**, built from first principles.
+This repository is a learning environment for **agentic development from first principles**.  
+The architecture is intentionally simple, transparent, and extensible, allowing multiple game worlds,
+multiple tool backends, and multiple styles of LLM agents to coexist.
 
-There are now **three architecture layers**, plus support for **multiple worlds**.
+The project is now structured into **four major layers**:
 
----
+1. Worlds  
+2. Tool Backends  
+3. Agent Logic (Shared & World-Specific)  
+4. Agent Runners (Python & MCP)
 
-# 1. Worlds
-
-All game worlds live under `games/`.
-
-Each world contains **only game logic**, no AI code:
-
-### `games/gridworld/core.py`
-- 10×10 grid with walls & items  
-- player movement  
-- inventory system  
-- pickup & crafting  
-- torch recipe  
-- goal: craft 1 torch  
-
-### `games/keydoor/core.py`
-- new world type  
-- contains a key (`K`) and a door (`D`)  
-- player must pick up the key and unlock the door  
-- no crafting  
-- simpler inventory  
-- goal: `{"action": "unlock", "item": "door"}`
-
-Worlds are intentionally isolated — swapping worlds should not affect the agent code.
+Below is the complete, accurate description of how the current system works.
 
 ---
 
-# 2. Tool Backends
+# 1. Worlds (`games/`)
 
-These wrap a world into a set of callable actions.
+Worlds contain **only game logic** and define the rules of each environment.
 
-### 2.1 Python Tools
-`agent/tools.py`  
+They do *not* contain:
+- LLM logic  
+- planning  
+- policies  
+- MCP code  
 
-A lightweight wrapper exposing:
+They simply expose Python methods such as `observe()`, `move()`, `pickup()`, etc.
+
+## 1.1 GridWorld (`games/gridworld/core.py`)
+The original environment:
+- 10×10 grid with walls  
+- Items: coal (`C`), stick (`S`)  
+- Inventory system  
+- Crafting: `torch = coal + stick`  
+- `pickup()`, `craft()`, `move()`  
+- Goal: craft a torch  
+
+## 1.2 KeyDoorWorld (`games/keydoor/core.py`)
+The second environment:
+- Key tile (`K`)  
+- Door tile (`D`)  
+- Inventory contains a single field `"key"`  
+- Player must:
+  1. Walk to the key  
+  2. Pick it up  
+  3. Walk to the door  
+  4. Unlock it via `open_door()`  
+- Goal: `{"action": "unlock", "item": "door"}`  
+
+Worlds follow the same interface but define their own rules internally.
+
+---
+
+# 2. Tool Backends (`agent/` and MCP servers)
+
+Tool backends expose world actions in a **tool-callable** format.
+They convert the world into something an LLM can interact with.
+
+There are two types: Python direct tools and MCP-exposed tools.
+
+## 2.1 Python Tools (`agent/tools.py`)
+This file wraps a world instance and exposes:
+
 - `observe()`
 - `move(direction)`
 - `pickup()`
-- `craft(...)`
-- (world-specific tools e.g. `open_door()`)
+- `craft(item, qty)` (GridWorld only)
+- `open_door()` (KeyDoorWorld only)
 
-Used by:
-- `scripts/run_llm_agent.py`
+Python tools are used by:
+- `scripts/run_llm_agent.py`  
 - `scripts/run_llm_agent_keydoor.py`
 
-### 2.2 MCP Server
-`mcp_gridworld_server.py`
+These are simple wrappers — no agent logic lives here.
 
-Uses **FastMCP** to expose GridWorld as an MCP tool provider.
+## 2.2 MCP Tool Server (`mcp_gridworld_server.py`)
+Exposes the **GridWorld** tools via the **Model Context Protocol** using FastMCP.
 
-This enables:
-- remote control  
-- LLM-over-MCP agents  
-- compatibility with ChatGPT / Claude tool calling  
+Tools registered:
+- `gridworld.observe`
+- `gridworld.move`
+- `gridworld.pickup`
+- `gridworld.craft`
 
-Currently implemented for GridWorld.  
-A KeyDoorWorld MCP server will be added later.
+This allows:
+- ChatGPT
+- Claude
+- Assistant API
+- External LLM agents
+
+…to control the world over a protocol instead of Python imports.
+
+(A KeyDoorWorld MCP server can be added at any time using the same pattern.)
 
 ---
 
-# 3. Agent Loops & Shared Helper Layer
+# 3. Agent Logic
 
-### 3.1 Shared helper functions
+Agent logic is split into **shared utilities** and **world-specific policies**.
 
-`agent/loop.py` is the core “agent brain” support module.
+## 3.1 Shared Logic (`agent/loop.py`)
+This file contains **world-agnostic** utilities that support every agent:
 
-It contains world-agnostic utilities:
-- `find_items_in_grid`
-- `format_observation`
-- `attach_memory`
-- `reflex_action`
-- `enforce_action_constraints`
-- `suggest_direction_toward_target`
+- `format_observation()`  
+- `attach_memory()`  
+- structured observation creation  
+- LLM prompt helpers  
+- memory injection  
+- common utilities used by all planners  
 
-Both GridWorld and KeyDoorWorld agents use this file.
+Importantly, **Milestone 9 removed all world-specific rules** from this file.
 
-### 3.2 LLM Planner (Python Backend)
+It is now truly universal.
 
+## 3.2 World-Specific Policy Modules (`agent/policies/`)
+This was Milestone 9 — and it fundamentally improved scalability.
+
+Each world now has its own file:
+
+- `agent/policies/`
+  - gridworld_policy.py
+  - keydoor_policy.py
+
+Each policy implements two key functions:
+
+### `reflex_action(obs)`
+- Auto-pickup logic  
+- Crafting reflexes (GridWorld)  
+- Auto-unlock (KeyDoorWorld) if conditions are met  
+
+### `enforce_action_constraints(obs, action)`
+- Validity checks  
+- Block illegal actions  
+- Fix actions the LLM suggested incorrectly  
+- Improve navigation or avoid repeated mistakes
+
+These policy modules are the “rules of the world,” separate from the shared logic.
+
+The LLM planner loads the correct module based on which world is running.
+
+---
+
+# 4. Agent Runners (`scripts/`)
+
+Agent runners are the actual loops that:
+
+1. Call `tools.observe()`  
+2. Format observation  
+3. Apply policy reflexes  
+4. Ask the LLM to choose an action  
+5. Apply constraints  
+6. Perform the action  
+7. Update memory  
+8. Repeat until goal achieved or steps exhausted
+
+There are three main runners:
+
+## 4.1 Direct Python LLM Agent (GridWorld)
 `scripts/run_llm_agent.py`  
-`scripts/run_llm_agent_keydoor.py`
+Uses:
+- Python tools  
+- Shared helper logic  
+- GridWorld policy  
 
-- Requests LLM actions  
-- Applies reflexes + constraints  
-- Dispatches tool calls  
-- Updates memory and observation  
+This is the simplest LLM agent.
 
-### 3.3 LLM-over-MCP Planner
+## 4.2 Direct Python LLM Agent (KeyDoorWorld)
+`scripts/run_llm_agent_keydoor.py`  
+Same architecture, but loads KeyDoorWorld + its policy module.
 
-`scripts/run_llm_agent_mcp.py`
+Proves multi-world scalability.
 
-- Uses MCP instead of Python methods  
-- Demonstrates full production-style separation:
-  LLM → MCP → Environment
+## 4.3 LLM-over-MCP Agent
+`scripts/run_llm_agent_mcp.py`  
+Uses:
+- MCP tools instead of Python methods  
+- Same agent loop  
+- Same policy and helper layers  
 
----
-
-# 4. Directory Evolution & Future Refactor
-
-As the project gained a second world, the following became clear:
-
-- reflexes and constraints differ per-world  
-- world-specific logic should not live in a shared helper module  
-- scalability requires separating:
-  - *shared logic*
-  - *world-specific “policies”*
-
-**Upcoming refactor (Milestone 9):**
-
-```
-agent/policies/
-    gridworld_policy.py
-    keydoor_policy.py
-```
-
-Each policy module will define:
-- `reflex_action()`
-- `enforce_action_constraints()`
-
-This keeps `agent/loop.py` clean and world-agnostic.
+This is the "realistic" production-style architecture:
+LLM → MCP → Environment.
 
 ---
 
-# 5. Older Utilities
+# 5. Directory Structure Overview
 
-Kept for learning history:
+For clarity, the repo now conceptually looks like this:
 
-- `agent/rule_based.py`
-- `scripts/run_agent.py`
-- `scripts/run.py`
-- `scripts/test_tools_smoke.py`
+- `games/`
+  - `gridworld/`
+    - core.py
+  - `keydoor/`
+    - core.py
 
-These trace the evolution from Milestones 0 → 3B.
+- `agent/`
+  - tools.py
+  - loop.py
+  - `policies/`
+    - gridworld_policy.py
+    - keydoor_policy.py
+
+- `scripts/`
+  - run_llm_agent.py
+  - run_llm_agent_keydoor.py
+  - run_llm_agent_mcp.py
+
+- mcp_gridworld_server.py
+
+
+This layout is clean, scalable, and ready for many more worlds.
 
 ---
 
-# 6. Milestones
+# 6. How the Layers Fit Together
 
-See README.md for a full ordered milestone list.
+**World (game rules)**  
+↓  
+**Tools (API surface for actions)**  
+↓  
+**Policy (world-specific constraints + reflexes)**  
+↓  
+**Shared helpers (LLM formatting, memory, observation shaping)**  
+↓  
+**Agent Loop (choose action, run step)**  
+↓  
+**LLM models (external — Groq / API)**
 
-This `ARCHITECTURE.md` documents how the pieces fit together in the final structure.
+This modularity allows:
 
+- many worlds  
+- many planners  
+- many backends  
+- multiple visualization layers (e.g., upcoming Pygame UI)
+
+…without breaking the architecture.
+
+---
+
+# 7. Next Steps in Architecture
+
+Future milestones will extend this architecture naturally:
+
+- Intent Planner (M10)
+- Pygame front-end (M11)
+- Multi-world unified agent (M12)
+- Real-game integrations (M13)
+
+This document will evolve as the system grows, but the core abstraction boundaries are already strong and stable.
