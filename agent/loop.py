@@ -28,6 +28,10 @@ def find_items_in_grid(grid: List[str]) -> List[Dict[str, Any]]:
                 items.append({"type": "coal", "row": r, "col": c})
             elif ch == "S":
                 items.append({"type": "stick", "row": r, "col": c})
+            elif ch == "K":
+                items.append({"type": "key", "row": r, "col": c})
+            elif ch == "D":
+                items.append({"type": "door", "row": r, "col": c})
     return items
 
 def attach_memory(
@@ -105,12 +109,18 @@ def reflex_action(obs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         tile = "."
     
     # Reflex 1: standing on an item? Always pick it up.
-    if tile in ("C", "S"):
+    # Works for both GridWorld (C, S) and KeyDoorWorld (K).
+    if tile in ("C", "S", "K"):
         return {"tool": "pickup", "args": {}}
     
     # (Optional Reflex 2: auto-craft when ready)
-    # if inventory.get("coal", 0) >= 1 and inventory.get("stick", 0) >= 1 and inventory.get("torch", 0) < 1:
-    #      return {"tool": "craft", "args": {"item": "torch", "qty": 1}}
+    if inventory.get("coal", 0) >= 1 and inventory.get("stick", 0) >= 1 and inventory.get("torch", 0) < 1:
+         return {"tool": "craft", "args": {"item": "torch", "qty": 1}}
+    
+    # Reflex 2: in KeyDoorWorld, if we are standing on the door tile
+    # and we already have the key, auto-open the door.
+    if tile == "D" and inventory.get("key", 0) >= 1:
+        return {"tool": "open_door", "args": {}}
 
     return None # no reflex triggered
 
@@ -185,7 +195,9 @@ def enforce_action_constraints(obs: Dict[str, Any], action: Dict[str, Any]) -> D
     args = action.get("args", {})
 
     # -------- Rule 1: Cannot pickup if not standing on C or S --------
-    if name == "pickup" and tile not in ("C", "S"):
+    # GridWorld items: C (coal), S (stick)
+    # KeyDoorWorld item: K (key)
+    if name == "pickup" and tile not in ("C", "S", "K"):
         # Turn this into a move; we'll refine the direction below.
         name = "move"
         args = {"direction": "right"}  # temporary default
@@ -202,15 +214,27 @@ def enforce_action_constraints(obs: Dict[str, Any], action: Dict[str, Any]) -> D
     if name == "move":
         # 1) Decide what we need next
         items_in_world = find_items_in_grid(grid)
+        goal = obs.get("goal", {})
+        goal_action = goal.get("action")
 
         target_type = None
-        if inventory.get("coal", 0) < 1:
-            target_type = "coal"
-        elif inventory.get("stick", 0) < 1:
-            target_type = "stick"
-        else:
-            target_type = None  # we already have everything we need to craft
 
+        if goal_action == "craft":
+            # GridWorld mode: get coal then stick
+            if inventory.get("coal", 0) < 1:
+                target_type = "coal"
+            elif inventory.get("stick", 0) < 1:
+                target_type = "stick"
+            else:
+                target_type = None  # we already have everything we need to craft
+    
+        elif goal_action == "unlock":
+            #KeyDoorWorld mode: get key, then go to door
+            if inventory.get("key", 0) < 1:
+                target_type = "key"
+            else:
+                target_type = "door"
+                
         # 2) Find nearest item of that type (if any)
         target_item = None
         if target_type is not None:
