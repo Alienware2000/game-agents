@@ -37,6 +37,24 @@ More worlds will be added in future milestones.
 
 ---
 
+# 🧱 Milestone 9 — World-Specific Policy Modules (NEW)
+
+### ✔️ Completed
+
+- Added `agent/policies/gridworld_policy.py`  
+- Added `agent/policies/keydoor_policy.py`  
+- Moved **world-specific reflexes + constraints** out of `agent/loop.py`  
+- `agent/loop.py` is now **fully world-agnostic**  
+- LLM planners automatically import the correct policy module based on world type  
+- Architecture now scales elegantly to:
+  - many environments  
+  - richer rule sets  
+  - cleaner division between shared logic & world logic  
+
+This was a major cleanup milestone that makes future worlds, tools, and agents dramatically easier to implement.
+
+---
+
 ## 🛰️ Milestone 4 — MCP Integration (Tool Server Architecture)
 
 ### ✔️ Completed
@@ -270,11 +288,16 @@ A concise list of all milestones completed so far in this project:
     - Reused the entire agent loop architecture with minimal changes
     - Verified LLM-driven unlocking works end-to-end
       
-(Upcoming)   
-- **Milestone 9:** Policy modules (world-specific reflexes + constraints)
-- **Milestone 10:** Pygame front-end
-- **Milestone 11:** Multi-world unified agent
-- **Milestone 12:** Integration with real games (Minecraft, Terraria, Stardew-like worlds)
+- **Milestone 9:** World-Specific Policy Modules  
+  - Extracted world-dependent reflexes + constraints  
+  - Introduced `agent/policies/*`  
+  - Core agent loop is now clean and fully world-agnostic
+      
+(Upcoming)
+- **Milestone 10:** Intent Planner (true multi-step reasoning for actions)  
+- **Milestone 11:** Pygame front-end  
+- **Milestone 12:** Multi-world unified agent  
+- **Milestone 13:** Integration with real games (Minecraft, Terraria, Stardew-like worlds)
 
 ---
 
