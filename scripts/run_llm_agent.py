@@ -9,10 +9,8 @@ from agent.tools import Tools
 from agent.loop import (
     attach_memory,
     format_observation,
-    reflex_action,
-    enforce_action_constraints,
-    suggest_direction_toward_target
 )
+from agent.policies import gridworld_policy as policy
 
 SYSTEM_PROMPT = """
 You are an agent playing a simple grid-based game.
@@ -159,8 +157,8 @@ def main():
         # Attach memory into obs so reflex + LLM both see it
         obs = attach_memory(obs, last_action, last_result)
 
-        # 1) Check for reflex actions first
-        action = reflex_action(obs)
+        # 1) Check for reflex actions first (Gridworld policy)
+        action = policy.reflex_action(obs)
         if action is not None:
             print("Reflex chose action:", action)
         else:
@@ -174,7 +172,7 @@ def main():
 
 
         # 3) Enforce hard constraints on the chosen action
-        action = enforce_action_constraints(obs, action)
+        action = policy.enforce_action_constraints(obs, action)
         print("Action after constraints:", action)
 
         # 4) Dispatch the chosen action

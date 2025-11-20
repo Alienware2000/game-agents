@@ -9,10 +9,8 @@ from agent.tools import KeyDoorTools
 from agent.loop import (
     attach_memory,
     format_observation,
-    reflex_action,
-    enforce_action_constraints,
-    suggest_direction_toward_target
 )
+from agent.policies import keydoor_policy as policy
 
 SYSTEM_PROMPT = """
 You are an agent playing a simple key-and-door puzzle game on a 2D grid.
@@ -162,7 +160,7 @@ def main():
         obs = attach_memory(obs, last_action, last_result)
 
         # 1) Check reflex_actions first
-        action = reflex_action(obs)
+        action = policy.reflex_action(obs)
         if action is not None:
             print("Reflex chose action:", action)
         else:
@@ -175,7 +173,7 @@ def main():
                 break
 
         # 3) Enforce hard constraints on the chosen action
-        action = enforce_action_constraints(obs, action)
+        action = policy.enforce_action_constraints(obs, action)
         print("Action after constraints:", action)
 
         # 4) Dispatch the chosen action
