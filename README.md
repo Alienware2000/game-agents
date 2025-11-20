@@ -136,6 +136,29 @@ At this stage, the LLM planner talks to the environment directly via Python, whi
 
 ---
 
+## 🧱 Milestone 7 — Agent Architecture Cleanup
+
+### ✔️ Completed (optional class wrapper not required)
+
+- Created the unified **agent brain utility layer** in `agent/loop.py`:
+  - `find_items_in_grid`
+  - `format_observation`
+  - `attach_memory`
+  - `reflex_action`
+  - `suggest_direction_toward_target`
+  - `enforce_action_constraints`
+- Both LLM agents now share the same logic.
+- Clear separation of concerns:
+  - `games/` = environment  
+  - `agent/` = agent brain + tools  
+  - `scripts/` = agent loops / runners  
+  - `mcp_*.py` = protocol servers  
+
+The milestone is done.  
+The optional `class Agent:` wrapper can be added later if needed.
+
+---
+
 ## 🏁 Milestone Summary (Project Progress)
 
 A concise list of all milestones completed so far in this project:
@@ -187,9 +210,15 @@ A concise list of all milestones completed so far in this project:
   - All environment interaction flows through MCP tools  
   - Brings the architecture in line with real-world LLM tool usage patterns
 
-(Upcoming)  
-- **Milestone 7:** Agent Architecture Cleanup (class-based design, shared components)  
+- **Milestone 7:** Agent Architecture Cleanup (Optional class-based design, shared components)
+  - Created the unified **agent brain utility layer** in `agent/loop.py`
+  - Both LLM agents now share the same logic.
+  - Clear separation of concerns
+  - The optional `class Agent:` wrapper can be added later if needed.
+
+(Upcoming)   
 - **Milestone 8:** Second Game World (Pygame or custom design)
+- **Milestone 9:** Connect agent to games like Minecraft, Terraria, Stardew Valley...
 
 ---
 
