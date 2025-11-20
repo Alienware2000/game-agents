@@ -10,6 +10,33 @@ This project uses games as a fun and visual way to explore agent capabilities, d
 
 ---
 
+# 🌍 Multiple Worlds Now Supported
+
+The project now supports **multiple independent game worlds**, each representing a different agentic challenge:
+
+### ✔️ GridWorld  
+The original environment:
+- 10×10 grid  
+- coal + stick items  
+- inventory  
+- crafting  
+- goal: craft a torch  
+
+### ✔️ KeyDoorWorld (NEW — Milestone 8)  
+A second, fully independent world:
+- player must locate a **Key (K)**  
+- pick it up  
+- find the **Door (D)**  
+- unlock it  
+- no crafting, simpler inventory  
+- goal: `{"action": "unlock", "item": "door"}`
+
+This milestone demonstrates the scalability of the architecture and introduces multi-world agent loops.
+
+More worlds will be added in future milestones.
+
+---
+
 ## 🛰️ Milestone 4 — MCP Integration (Tool Server Architecture)
 
 ### ✔️ Completed
@@ -159,6 +186,25 @@ The optional `class Agent:` wrapper can be added later if needed.
 
 ---
 
+# 🔑 Milestone 8 — Second Game World: KeyDoorWorld (NEW)
+
+### ✔️ Completed
+
+- Added `games/keydoor/core.py`
+- Fully independent logic:
+  - Key tile (`K`)
+  - Door tile (`D`)
+  - Inventory with `"key"`
+  - `open_door()` tool
+  - Goal completion via unlocking
+- Added `scripts/run_llm_agent_keydoor.py`
+- Reused the entire agent loop architecture with minimal changes
+- Verified LLM-driven unlocking works end-to-end
+
+This milestone proves that the architecture is scalable and supports **multi-world agents**.
+
+---
+
 ## 🏁 Milestone Summary (Project Progress)
 
 A concise list of all milestones completed so far in this project:
@@ -215,10 +261,20 @@ A concise list of all milestones completed so far in this project:
   - Both LLM agents now share the same logic.
   - Clear separation of concerns
   - The optional `class Agent:` wrapper can be added later if needed.
-
+    
+- **Milestone 8:** Second Game World (KeyDoorWorld)
+    - Added `games/keydoor/core.py`
+    - Fully independent logic
+    - Goal completion via unlocking
+    - Added `scripts/run_llm_agent_keydoor.py`
+    - Reused the entire agent loop architecture with minimal changes
+    - Verified LLM-driven unlocking works end-to-end
+      
 (Upcoming)   
-- **Milestone 8:** Second Game World (Pygame or custom design)
-- **Milestone 9:** Connect agent to games like Minecraft, Terraria, Stardew Valley...
+- **Milestone 9:** Policy modules (world-specific reflexes + constraints)
+- **Milestone 10:** Pygame front-end
+- **Milestone 11:** Multi-world unified agent
+- **Milestone 12:** Integration with real games (Minecraft, Terraria, Stardew-like worlds)
 
 ---
 
