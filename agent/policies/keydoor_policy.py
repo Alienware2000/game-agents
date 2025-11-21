@@ -114,3 +114,63 @@ def enforce_action_constraints(obs: Dict[str, Any], action: Dict[str, Any]) -> D
                     break
 
     return action
+
+def intent_to_action_keydoor(obs: Dict[str, Any], intent_obj: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Translate a high-level intent for KeyDoorWorld into a concrete tool call.
+
+    The intent_obj is expected to have:
+        {
+          "intent": "go_to_key" | "pickup_key" | "go_to_door" | "unlock_door",
+          "reason": "..."
+        }
+
+    Returns an action dict of the form:
+        {"tool": "<name>", "args": {...}}
+    """
+
+    intent = intent_obj.get("intent")
+    player = obs["player"]
+    grid = obs["grid"]
+    inventory = obs["inventory"]
+
+    items = find_items_in_grid(grid)
+    key_tiles = [it for it in items if it["type"] == "key"]
+    door_tiles = [it for it in items if it["type"] == "door"]
+
+    row = player["row"]
+    col = player["col"]
+
+    on_door_tile = any(
+        it["type"] == "door" and it["row"] == row and it["col"] == col
+        for it in items
+    )
+
+    # Helper to choose a direction toward some target list
+    def move_toward_first(target_list):
+        if not target_list:
+            # If we somehow have no target, default to a harmless move.
+            return {"tool": "move", "args": {"direction": "right"}}
+        target = target_list[0]
+        direction = suggest_direction_toward_target(player, target)
+        return {"tool": "move", "args": {"direction": direction}}
+
+    # ---- Intent cases -----------------------------------------------------
+
+    if intent == "go_to_key":
+        return move_toward_first(key_tiles)
+
+    if intent == "pickup_key":
+        return {"tool": "pickup", "args": {}}
+
+    if intent == "go_to_door":
+        return move_toward_first(door_tiles)
+
+    if intent == "unlock_door":
+        # Safety: if we are not actually on the door, treat this as "go_to_door".
+        if not on_door_tile or inventory.get("key", 0) <= 0:
+            return move_toward_first(door_tiles)
+        return {"tool": "open_door", "args": {}}
+
+    # Fallback: unknown intent -> harmless move
+    return {"tool": "move", "args": {"direction": "right"}}
