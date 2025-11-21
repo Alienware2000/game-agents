@@ -37,189 +37,41 @@ More worlds will be added in future milestones.
 
 ---
 
-# 🧱 Milestone 9 — World-Specific Policy Modules (NEW)
+# 🧠 Milestone 10 — Intent Planner (NEW)
 
 ### ✔️ Completed
 
-- Added `agent/policies/gridworld_policy.py`  
-- Added `agent/policies/keydoor_policy.py`  
-- Moved **world-specific reflexes + constraints** out of `agent/loop.py`  
-- `agent/loop.py` is now **fully world-agnostic**  
-- LLM planners automatically import the correct policy module based on world type  
-- Architecture now scales elegantly to:
-  - many environments  
-  - richer rule sets  
-  - cleaner division between shared logic & world logic  
+- Introduced **high-level intent planning** on top of world-specific reflexes and navigation.
+- Implemented a dedicated `agent/intents/keydoor_intent.py` for KeyDoorWorld.
+- The model now reasons at a *goal level*, producing intents such as:
+  - `"go_to_key"`
+  - `"pickup_key"`
+  - `"go_to_door"`
+  - `"unlock_door"`
+- Added intent-to-action mapping (`intent_to_action_keydoor`) converting intents into concrete tool calls.
+- Integrated the intent planner into a new loop:  
+  *reflex → intent planner → constraints → dispatch → observe → repeat*.
+- Demonstrated **much more stable behavior** in KeyDoorWorld, reducing oscillations and mistaken tool calls.
+- This milestone brings the architecture closer to **real agent stacks**:
+  - reflex layer (fast, local corrections)
+  - intent layer (LLM reasoning)
+  - action layer (tools + constraints)
+  - environment layer (world-specific game logic)
 
-This was a major cleanup milestone that makes future worlds, tools, and agents dramatically easier to implement.
+### 🧩 Why This Matters
 
----
+In modern agent systems (Voyager, Devin, ReAct-style agents, robotics planners):
 
-## 🛰️ Milestone 4 — MCP Integration (Tool Server Architecture)
+- LLMs do *not* choose raw actions every step.
+- They choose **intent-level decisions**.
+- Lower layers convert those intents into legal, safe, environment-appropriate actions.
 
-### ✔️ Completed
+This milestone adds that layer and prepares the project for:
 
-- **Built `mcp_gridworld_server.py`**, turning the entire GridWorld into an **MCP-compliant tool server**.
-- Exposed the environment’s capabilities as MCP tools:
-  - `observe()`
-  - `move(direction)`
-  - `pickup()`
-  - `craft(item, qty)`
-- **Integrated FastMCP**, the official Python Model Context Protocol SDK.
-- **Verified schemas and tool contracts** through the MCP Inspector GUI.
-- Successfully:
-  - launched the MCP server via STDIO transport  
-  - connected using the Inspector  
-  - invoked tools manually  
-  - observed live world updates  
-  - picked up items and crafted using MCP calls  
-
-This milestone lifts the project from a local Python simulation to a **portable, externally-controllable agent environment**.
-
-> **Note:** The MCP server exposes the GridWorld as tools.  
-> Initially, the LLM planner ran in a separate script and called the environment directly.  
-> Later milestones route the planner’s tool use *through* MCP as well.
-
-### 🧠 Why This Matters
-
-With MCP integration:
-
-- The GridWorld becomes a **first-class tool provider** for any LLM or agent capable of MCP.
-- Tools are now described using **schemas**, which lets the LLM understand how to call them.
-- The environment operates like a real API — the same pattern used by:
-  - ChatGPT / Claude tool calling  
-  - Cursor agents  
-  - Voyager / Minecraft-style agents  
-  - Web automation tools  
-  - Robotics / IoT control systems  
-
-GridWorld is now “LLM-ready,” meaning any Large Language Model can reason about the world, choose actions, and call tools through a protocol.
-
-This is the exact architecture modern agentic systems are built on.
-
----
-
-## 🤖 Milestone 5 — LLM Planner Agent (Structured Observations + Tool Use, Direct Python)
-
-### ✔️ Completed
-
-- Implemented `scripts/run_llm_agent.py`, a **LLM-driven control loop**:
-  - Uses an LLM (via Groq / OpenAI-compatible APIs) to choose actions.
-  - The agent **never touches the GridWorld directly** — it only acts through tools:
-    - `move(direction)`
-    - `pickup()`
-    - `craft(item, qty)`.
-- Designed a clean **observe → plan → act → repeat** loop:
-  - Environment returns a structured observation (`grid`, `player`, `inventory`, `goal`, `goal_done`).
-  - We format this into a prompt and ask the LLM which tool to call next.
-- Added **preprocessed perception** for the LLM:
-  - `items_in_world = [{"type": "coal", "row": ..., "col": ...}, ...]`
-  - This gives the model an object-level view of the world instead of forcing it to “read” ASCII art.
-- Introduced **short-term memory** in the observation:
-  - `last_action`
-  - `last_result`
-  - This lets the LLM see whether the last move failed (e.g. `"move blocked"`) and adjust.
-- Implemented **action constraints & safety checks**:
-  - Block illegal or useless actions (e.g. `pickup()` when nothing is under the player).
-  - Prevent repeated blocked moves (do not keep walking into a wall).
-  - Ensure `craft("torch", 1)` is only called when there is at least one `coal` and one `stick`.
-- Added a small helper policy, `suggest_direction_toward_target`, that:
-  - Looks at `player` vs `items_in_world`
-  - Suggests a direction that reduces Manhattan distance to the next needed item
-  - Is used as a *fallback / nudge* when the LLM keeps getting stuck
-
-### 🧩 What This Milestone Shows
-
-- How to wrap a simple grid world in **tool-like actions** and let an LLM decide which to call.
-- How to combine:
-  - LLM **flexibility** (choosing tools, reacting to results)
-  - with **guardrails** (constraints, reflex rules, fallback heuristics).
-- How to build up an agent loop **incrementally**:
-  1. Pure rule-based planner (M3B).
-  2. LLM planner with raw grid.
-  3. LLM planner with structured perception + memory + constraints.
-
-At this stage, the LLM planner talks to the environment directly via Python, while MCP exposes the same tools over a protocol.
-
----
-
-## 🌐 Milestone 6 — LLM-over-MCP (Agent Uses MCP Server as Tool Backend)
-
-### ✔️ Completed
-
-- Implemented `scripts/run_llm_agent_mcp.py`, a **LLM agent that controls GridWorld through MCP** instead of calling Python methods directly.
-- The agent loop now:
-  - Calls the MCP tool **`gridworld.observe`** to get the latest world state.
-  - Formats a structured observation (including `items_in_world`, `last_action`, `last_result`).
-  - Asks the LLM to pick the next tool to call.
-  - Maps the chosen tool to an MCP tool name:
-    - `gridworld.observe`
-    - `gridworld.move`
-    - `gridworld.pickup`
-    - `gridworld.craft`
-  - Sends the tool call via MCP and receives the result.
-  - Updates memory and repeats until the goal is achieved or steps are exhausted.
-- Reuses the same:
-  - **reflex rules** (auto-pickup on items),
-  - **action constraints** (legal actions only),
-  - and navigation helper (`suggest_direction_toward_target`),  
-  now sitting on top of an **MCP-based tool backend**.
-
-### 🧠 Why This Matters
-
-- The GridWorld is now a **remote environment reached entirely via a protocol**.
-- The agent behaves like a real LLM app client:
-  - it doesn’t “reach into” the game’s internals,
-  - it only sees observations and calls tools over MCP.
-- This mirrors how:
-  - ChatGPT tools,
-  - Claude tools,
-  - and other agent hosts  
-    interact with external systems.
-- This milestone is the full **“LLM-over-MCP”** pattern:  
-  an LLM planner driving a tool-exposed environment through a standard protocol.
-
----
-
-## 🧱 Milestone 7 — Agent Architecture Cleanup
-
-### ✔️ Completed (optional class wrapper not required)
-
-- Created the unified **agent brain utility layer** in `agent/loop.py`:
-  - `find_items_in_grid`
-  - `format_observation`
-  - `attach_memory`
-  - `reflex_action`
-  - `suggest_direction_toward_target`
-  - `enforce_action_constraints`
-- Both LLM agents now share the same logic.
-- Clear separation of concerns:
-  - `games/` = environment  
-  - `agent/` = agent brain + tools  
-  - `scripts/` = agent loops / runners  
-  - `mcp_*.py` = protocol servers  
-
-The milestone is done.  
-The optional `class Agent:` wrapper can be added later if needed.
-
----
-
-# 🔑 Milestone 8 — Second Game World: KeyDoorWorld (NEW)
-
-### ✔️ Completed
-
-- Added `games/keydoor/core.py`
-- Fully independent logic:
-  - Key tile (`K`)
-  - Door tile (`D`)
-  - Inventory with `"key"`
-  - `open_door()` tool
-  - Goal completion via unlocking
-- Added `scripts/run_llm_agent_keydoor.py`
-- Reused the entire agent loop architecture with minimal changes
-- Verified LLM-driven unlocking works end-to-end
-
-This milestone proves that the architecture is scalable and supports **multi-world agents**.
+- multi-step plan generation  
+- planning graphs  
+- curriculum learning  
+- and higher-level world abstractions.
 
 ---
 
@@ -292,9 +144,19 @@ A concise list of all milestones completed so far in this project:
   - Extracted world-dependent reflexes + constraints  
   - Introduced `agent/policies/*`  
   - Core agent loop is now clean and fully world-agnostic
+
+- **Milestone 9:** World-Specific Policy Modules  
+  - Extracted world-dependent reflexes + constraints  
+  - Introduced `agent/policies/*`  
+  - Core agent loop is now clean and fully world-agnostic
+
+- **Milestone 10:** Intent Planner  
+  - Added high-level decision-making  
+  - Introduced world-specific intent planners  
+  - Mapped intents to low-level tools  
+  - Improved multi-step reasoning stability 
       
 (Upcoming)
-- **Milestone 10:** Intent Planner (true multi-step reasoning for actions)  
 - **Milestone 11:** Pygame front-end  
 - **Milestone 12:** Multi-world unified agent  
 - **Milestone 13:** Integration with real games (Minecraft, Terraria, Stardew-like worlds)
