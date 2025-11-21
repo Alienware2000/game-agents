@@ -139,11 +139,6 @@ A concise list of all milestones completed so far in this project:
     - Added `scripts/run_llm_agent_keydoor.py`
     - Reused the entire agent loop architecture with minimal changes
     - Verified LLM-driven unlocking works end-to-end
-      
-- **Milestone 9:** World-Specific Policy Modules  
-  - Extracted world-dependent reflexes + constraints  
-  - Introduced `agent/policies/*`  
-  - Core agent loop is now clean and fully world-agnostic
 
 - **Milestone 9:** World-Specific Policy Modules  
   - Extracted world-dependent reflexes + constraints  
