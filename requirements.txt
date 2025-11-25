@@ -1,3 +1,4 @@
 "mcp[cli]"
 openai
 groq
+gemini
