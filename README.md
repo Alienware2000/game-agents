@@ -199,3 +199,5 @@ Some of the ideas in this project connect to existing work on tool-using and emb
 - **ReAct: Synergizing Reasoning and Acting in Language Models** – early work on letting LLMs interleave reasoning and tool use.  
 - **Voyager: An Open-Ended Embodied Agent in Minecraft** – shows how agents can explore, learn skills, and act in a voxel world using tools and a curriculum.  
 - **Model Context Protocol (MCP) documentation** – explains how MCP servers expose tools to LLM-based apps.
+
+More coming soon...
