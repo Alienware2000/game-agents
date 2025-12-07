@@ -191,7 +191,7 @@ I want to deeply understand:
 This repository is a living journey toward **agentic mastery**, built one small, clear milestone at a time.
 
 ---
-
+ 
 ## 📚 Further Reading and References
 
 Some of the ideas in this project connect to existing work on tool-using and embodied agents:
