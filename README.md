@@ -7,7 +7,7 @@ The long-term goal is to master agentic thinking and agentic engineering across 
 games, embedded systems, robotics, productivity, business automation, and beyond.
 
 This project uses games as a fun and visual way to explore agent capabilities, decision-making, perception, and tool usage.
-
+ 
 ---
 
 # 🌍 Multiple Worlds Now Supported
