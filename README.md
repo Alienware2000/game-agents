@@ -1,5 +1,5 @@
 # 🧠 Game Agents — A Learning Sandbox for Agentic Development
-
+-
 **Game Agents** is my personal sandbox for learning **agentic development from first principles**.  
 Instead of relying on pre-built frameworks, I am building everything from scratch — the worlds, the tools, the agent loops, the planners, and the MCP server that makes the agent portable across environments.
 
