@@ -2,7 +2,7 @@
 
 **Game Agents** is my personal sandbox for learning **agentic development from first principles**.  
 Instead of relying on pre-built frameworks, I am building everything from scratch — the worlds, the tools, the agent loops, the planners, and the MCP server that makes the agent portable across environments.
-
+n
 The long-term goal is to master agentic thinking and agentic engineering across *any* domain:  
 games, embedded systems, robotics, productivity, business automation, and beyond.
 
